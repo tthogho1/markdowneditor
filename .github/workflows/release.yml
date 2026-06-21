@@ -1,4 +1,4 @@
-name: Build Windows EXE
+name: Build Release Binaries
 
 on:
   push:
@@ -7,8 +7,26 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact-name: markdown-editor-windows
+            binary: target/x86_64-pc-windows-msvc/release/markdown_editor_rust.exe
+
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact-name: markdown-editor-macos-intel
+            binary: target/x86_64-apple-darwin/release/markdown_editor_rust
+
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact-name: markdown-editor-macos-apple-silicon
+            binary: target/aarch64-apple-darwin/release/markdown_editor_rust
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
@@ -16,7 +34,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ matrix.target }}
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -25,13 +43,43 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: windows-cargo-${{ hashFiles('Cargo.lock') }}
+          key: ${{ matrix.target }}-cargo-${{ hashFiles('Cargo.lock') }}
 
       - name: Build release
-        run: cargo build --release --target x86_64-pc-windows-msvc
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: markdown-editor-windows
-          path: target/x86_64-pc-windows-msvc/release/markdown_editor_rust.exe
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.binary }}
+
+  universal-macos:
+    needs: build
+    runs-on: macos-latest
+
+    steps:
+      - name: Download Intel binary
+        uses: actions/download-artifact@v4
+        with:
+          name: markdown-editor-macos-intel
+          path: intel/
+
+      - name: Download Apple Silicon binary
+        uses: actions/download-artifact@v4
+        with:
+          name: markdown-editor-macos-apple-silicon
+          path: silicon/
+
+      - name: Create universal binary
+        run: |
+          chmod +x intel/markdown_editor_rust silicon/markdown_editor_rust
+          lipo -create -output markdown_editor_rust \
+            intel/markdown_editor_rust \
+            silicon/markdown_editor_rust
+
+      - name: Upload universal binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: markdown-editor-macos-universal
+          path: markdown_editor_rust
