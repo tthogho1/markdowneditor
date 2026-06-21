@@ -1,0 +1,10 @@
+[package]
+name = "markdown_editor_rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+egui = "0.29"
+eframe = "0.29"
+pulldown-cmark = "0.12"
+egui_commonmark = { version = "0.18", features = ["pulldown_cmark"] }
