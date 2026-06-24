@@ -2,70 +2,9 @@ use eframe::egui;
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver};
 
-const HELP_MD: &str = r#"# Markdown Cheat Sheet
-
-## Headings
-```
-# H1
-## H2
-### H3
-```
-
-## Emphasis
-```
-**bold**  or  __bold__
-*italic*  or  _italic_
-~~strikethrough~~
-```
-
-## Lists
-```
-- Unordered item
-- Another item
-  - Nested item
-
-1. Ordered item
-2. Second item
-```
-
-## Links & Images
-```
-[Link text](https://example.com)
-![Alt text](image.png)
-```
-
-## Code
-```
-`inline code`
-
-    indented code block (4 spaces)
-```
-
-Fenced block:
-````
-```rust
-fn main() {}
-```
-````
-
-## Blockquote
-```
-> This is a blockquote
-```
-
-## Horizontal Rule
-```
----
-```
-
-## Table
-```
-| Column A | Column B |
-|----------|----------|
-| cell 1   | cell 2   |
-```
-"#;
+const HELP_MD: &str = include_str!("help.md");
 
 struct MarkdownEditorApp {
     text: String,
@@ -73,6 +12,8 @@ struct MarkdownEditorApp {
     md_cache: CommonMarkCache,
     help_cache: CommonMarkCache,
     show_help: bool,
+    export_rx: Option<Receiver<Result<PathBuf, String>>>,
+    export_status: Option<String>,
 }
 
 impl MarkdownEditorApp {
@@ -85,6 +26,8 @@ impl MarkdownEditorApp {
             md_cache: CommonMarkCache::default(),
             help_cache: CommonMarkCache::default(),
             show_help: false,
+            export_rx: None,
+            export_status: None,
         }
     }
 
@@ -112,10 +55,48 @@ impl MarkdownEditorApp {
             self.file_path = Some(path);
         }
     }
+
+    fn export_docx(&mut self) {
+        let text = self.text.clone();
+        let default_name = self
+            .file_path
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .map(|s| format!("{}.docx", s.to_string_lossy()))
+            .unwrap_or_else(|| "output.docx".to_string());
+
+        let (tx, rx) = mpsc::channel();
+        self.export_rx = Some(rx);
+
+        std::thread::spawn(move || {
+            let path = rfd::FileDialog::new()
+                .add_filter("Word Document", &["docx"])
+                .set_file_name(&default_name)
+                .save_file();
+
+            if let Some(path) = path {
+                let result = knit_md_docx::write_file(&text, &path)
+                    .map(|_| path)
+                    .map_err(|e| e.to_string());
+                tx.send(result).ok();
+            }
+        });
+    }
 }
 
 impl eframe::App for MarkdownEditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Poll DOCX export result from background thread
+        if let Some(rx) = &self.export_rx {
+            if let Ok(result) = rx.try_recv() {
+                self.export_status = Some(match result {
+                    Ok(path) => format!("Exported: {}", path.display()),
+                    Err(e) => format!("Export failed: {}", e),
+                });
+                self.export_rx = None;
+            }
+        }
+
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
@@ -131,6 +112,14 @@ impl eframe::App for MarkdownEditorApp {
                         self.save_as(PathBuf::from("output.md"));
                         ui.close_menu();
                     }
+                    ui.separator();
+                    let exporting = self.export_rx.is_some();
+                    ui.add_enabled_ui(!exporting, |ui| {
+                        if ui.button("Export DOCX…").clicked() {
+                            self.export_docx();
+                            ui.close_menu();
+                        }
+                    });
                 });
                 ui.separator();
                 if ui.button("Help").clicked() {
@@ -140,12 +129,23 @@ impl eframe::App for MarkdownEditorApp {
         });
 
         egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
-            let label = self
-                .file_path
-                .as_deref()
-                .and_then(|p| p.to_str())
-                .unwrap_or("(untitled)");
-            ui.label(label);
+            ui.horizontal(|ui| {
+                let file_label = self
+                    .file_path
+                    .as_deref()
+                    .and_then(|p| p.to_str())
+                    .unwrap_or("(untitled)");
+                ui.label(file_label);
+
+                if let Some(status) = &self.export_status {
+                    ui.separator();
+                    ui.label(status);
+                }
+                if self.export_rx.is_some() {
+                    ui.separator();
+                    ui.label("Exporting…");
+                }
+            });
         });
 
         egui::SidePanel::left("editor_panel")

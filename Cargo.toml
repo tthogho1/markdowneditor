@@ -8,3 +8,5 @@ egui = "0.29"
 eframe = "0.29"
 pulldown-cmark = "0.12"
 egui_commonmark = { version = "0.18", features = ["pulldown_cmark"] }
+knit-md-docx = "0.1"
+rfd = "0.15"
