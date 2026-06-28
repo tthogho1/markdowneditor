@@ -25,6 +25,8 @@ pub struct Settings {
     pub theme: Theme,
     pub editor_font_size: f32,
     pub docx_page: DocxPage,
+    pub openai_api_key: String,
+    pub show_api_key: bool,
 }
 
 impl Default for Settings {
@@ -33,6 +35,8 @@ impl Default for Settings {
             theme: Theme::Light,
             editor_font_size: 14.0,
             docx_page: DocxPage::A4,
+            openai_api_key: String::new(),
+            show_api_key: false,
         }
     }
 }
@@ -71,6 +75,21 @@ impl Settings {
                         ui.horizontal(|ui| {
                             ui.radio_value(&mut self.docx_page, DocxPage::A4, "A4");
                             ui.radio_value(&mut self.docx_page, DocxPage::Letter, "Letter");
+                        });
+                        ui.end_row();
+
+                        ui.label("OpenAI API key");
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                eframe::egui::TextEdit::singleline(&mut self.openai_api_key)
+                                    .password(!self.show_api_key)
+                                    .desired_width(200.0)
+                                    .hint_text("sk-…"),
+                            );
+                            let eye = if self.show_api_key { "🙈" } else { "👁" };
+                            if ui.small_button(eye).clicked() {
+                                self.show_api_key = !self.show_api_key;
+                            }
                         });
                         ui.end_row();
                     });
