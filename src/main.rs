@@ -1,10 +1,39 @@
 use eframe::egui;
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
+use knit_md_docx::{ConvertOptions, PageSetup};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 
 const HELP_MD: &str = include_str!("help.md");
+
+#[derive(Clone, PartialEq)]
+enum Theme {
+    Light,
+    Dark,
+}
+
+#[derive(Clone, PartialEq)]
+enum DocxPage {
+    A4,
+    Letter,
+}
+
+struct Settings {
+    theme: Theme,
+    editor_font_size: f32,
+    docx_page: DocxPage,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            theme: Theme::Light,
+            editor_font_size: 14.0,
+            docx_page: DocxPage::A4,
+        }
+    }
+}
 
 struct MarkdownEditorApp {
     text: String,
@@ -12,6 +41,8 @@ struct MarkdownEditorApp {
     md_cache: CommonMarkCache,
     help_cache: CommonMarkCache,
     show_help: bool,
+    show_settings: bool,
+    settings: Settings,
     export_rx: Option<Receiver<Result<PathBuf, String>>>,
     export_status: Option<String>,
 }
@@ -26,6 +57,8 @@ impl MarkdownEditorApp {
             md_cache: CommonMarkCache::default(),
             help_cache: CommonMarkCache::default(),
             show_help: false,
+            show_settings: false,
+            settings: Settings::default(),
             export_rx: None,
             export_status: None,
         }
@@ -65,6 +98,11 @@ impl MarkdownEditorApp {
             .map(|s| format!("{}.docx", s.to_string_lossy()))
             .unwrap_or_else(|| "output.docx".to_string());
 
+        let page = match self.settings.docx_page {
+            DocxPage::A4 => PageSetup::A4,
+            DocxPage::Letter => PageSetup::LETTER,
+        };
+
         let (tx, rx) = mpsc::channel();
         self.export_rx = Some(rx);
 
@@ -75,17 +113,28 @@ impl MarkdownEditorApp {
                 .save_file();
 
             if let Some(path) = path {
-                let result = knit_md_docx::write_file(&text, &path)
+                let mut opts = ConvertOptions::default();
+                opts.page = page;
+                let result = knit_md_docx::write_file_with(&text, &opts, &path)
                     .map(|_| path)
                     .map_err(|e| e.to_string());
                 tx.send(result).ok();
             }
         });
     }
+
+    fn apply_theme(&self, ctx: &egui::Context) {
+        match self.settings.theme {
+            Theme::Light => ctx.set_visuals(egui::Visuals::light()),
+            Theme::Dark => ctx.set_visuals(egui::Visuals::dark()),
+        }
+    }
 }
 
 impl eframe::App for MarkdownEditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.apply_theme(ctx);
+
         // Poll DOCX export result from background thread
         if let Some(rx) = &self.export_rx {
             if let Ok(result) = rx.try_recv() {
@@ -122,6 +171,10 @@ impl eframe::App for MarkdownEditorApp {
                     });
                 });
                 ui.separator();
+                if ui.button("Settings").clicked() {
+                    self.show_settings = true;
+                }
+                ui.separator();
                 if ui.button("Help").clicked() {
                     self.show_help = true;
                 }
@@ -157,11 +210,12 @@ impl eframe::App for MarkdownEditorApp {
                 egui::ScrollArea::vertical()
                     .id_salt("editor_scroll")
                     .show(ui, |ui| {
+                        let font_id = egui::FontId::monospace(self.settings.editor_font_size);
                         ui.add(
                             egui::TextEdit::multiline(&mut self.text)
                                 .desired_width(f32::INFINITY)
                                 .desired_rows(40)
-                                .font(egui::TextStyle::Monospace),
+                                .font(font_id),
                         );
                     });
             });
@@ -176,6 +230,48 @@ impl eframe::App for MarkdownEditorApp {
                         .show(ui, &mut self.md_cache, &self.text);
                 });
         });
+
+        if self.show_settings {
+            egui::Window::new("Settings")
+                .open(&mut self.show_settings)
+                .resizable(false)
+                .default_width(320.0)
+                .show(ctx, |ui| {
+                    egui::Grid::new("settings_grid")
+                        .num_columns(2)
+                        .spacing([16.0, 12.0])
+                        .show(ui, |ui| {
+                            // Theme
+                            ui.label("Theme");
+                            ui.horizontal(|ui| {
+                                ui.radio_value(&mut self.settings.theme, Theme::Light, "Light");
+                                ui.radio_value(&mut self.settings.theme, Theme::Dark, "Dark");
+                            });
+                            ui.end_row();
+
+                            // Editor font size
+                            ui.label("Editor font size");
+                            ui.add(
+                                egui::Slider::new(&mut self.settings.editor_font_size, 10.0..=28.0)
+                                    .suffix(" pt")
+                                    .step_by(1.0),
+                            );
+                            ui.end_row();
+
+                            // DOCX page size
+                            ui.label("DOCX page size");
+                            ui.horizontal(|ui| {
+                                ui.radio_value(&mut self.settings.docx_page, DocxPage::A4, "A4");
+                                ui.radio_value(
+                                    &mut self.settings.docx_page,
+                                    DocxPage::Letter,
+                                    "Letter",
+                                );
+                            });
+                            ui.end_row();
+                        });
+                });
+        }
 
         if self.show_help {
             egui::Window::new("Markdown Help")
