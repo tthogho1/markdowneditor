@@ -1,4 +1,5 @@
 mod ai;
+mod fonts;
 mod settings;
 
 use ai::AiPanel;
@@ -26,7 +27,8 @@ struct MarkdownEditorApp {
 }
 
 impl MarkdownEditorApp {
-    fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        fonts::setup(&cc.egui_ctx);
         Self {
             text: String::from(
                 "# Hello from Markdown Editor\n\nStart typing **Markdown** here.\n\n- Live preview\n- File open/save\n- Fast native Rust app\n",
