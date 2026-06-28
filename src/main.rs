@@ -1,39 +1,14 @@
+mod settings;
+
 use eframe::egui;
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
-use knit_md_docx::{ConvertOptions, PageSetup};
+use knit_md_docx::ConvertOptions;
+use settings::Settings;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 
 const HELP_MD: &str = include_str!("help.md");
-
-#[derive(Clone, PartialEq)]
-enum Theme {
-    Light,
-    Dark,
-}
-
-#[derive(Clone, PartialEq)]
-enum DocxPage {
-    A4,
-    Letter,
-}
-
-struct Settings {
-    theme: Theme,
-    editor_font_size: f32,
-    docx_page: DocxPage,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            theme: Theme::Light,
-            editor_font_size: 14.0,
-            docx_page: DocxPage::A4,
-        }
-    }
-}
 
 struct MarkdownEditorApp {
     text: String,
@@ -98,10 +73,7 @@ impl MarkdownEditorApp {
             .map(|s| format!("{}.docx", s.to_string_lossy()))
             .unwrap_or_else(|| "output.docx".to_string());
 
-        let page = match self.settings.docx_page {
-            DocxPage::A4 => PageSetup::A4,
-            DocxPage::Letter => PageSetup::LETTER,
-        };
+        let page = self.settings.docx_page.to_page_setup();
 
         let (tx, rx) = mpsc::channel();
         self.export_rx = Some(rx);
@@ -123,17 +95,11 @@ impl MarkdownEditorApp {
         });
     }
 
-    fn apply_theme(&self, ctx: &egui::Context) {
-        match self.settings.theme {
-            Theme::Light => ctx.set_visuals(egui::Visuals::light()),
-            Theme::Dark => ctx.set_visuals(egui::Visuals::dark()),
-        }
-    }
 }
 
 impl eframe::App for MarkdownEditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.apply_theme(ctx);
+        self.settings.apply_theme(ctx);
 
         // Poll DOCX export result from background thread
         if let Some(rx) = &self.export_rx {
@@ -232,45 +198,7 @@ impl eframe::App for MarkdownEditorApp {
         });
 
         if self.show_settings {
-            egui::Window::new("Settings")
-                .open(&mut self.show_settings)
-                .resizable(false)
-                .default_width(320.0)
-                .show(ctx, |ui| {
-                    egui::Grid::new("settings_grid")
-                        .num_columns(2)
-                        .spacing([16.0, 12.0])
-                        .show(ui, |ui| {
-                            // Theme
-                            ui.label("Theme");
-                            ui.horizontal(|ui| {
-                                ui.radio_value(&mut self.settings.theme, Theme::Light, "Light");
-                                ui.radio_value(&mut self.settings.theme, Theme::Dark, "Dark");
-                            });
-                            ui.end_row();
-
-                            // Editor font size
-                            ui.label("Editor font size");
-                            ui.add(
-                                egui::Slider::new(&mut self.settings.editor_font_size, 10.0..=28.0)
-                                    .suffix(" pt")
-                                    .step_by(1.0),
-                            );
-                            ui.end_row();
-
-                            // DOCX page size
-                            ui.label("DOCX page size");
-                            ui.horizontal(|ui| {
-                                ui.radio_value(&mut self.settings.docx_page, DocxPage::A4, "A4");
-                                ui.radio_value(
-                                    &mut self.settings.docx_page,
-                                    DocxPage::Letter,
-                                    "Letter",
-                                );
-                            });
-                            ui.end_row();
-                        });
-                });
+            self.settings.show_window(ctx, &mut self.show_settings);
         }
 
         if self.show_help {
