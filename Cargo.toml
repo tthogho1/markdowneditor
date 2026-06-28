@@ -10,3 +10,5 @@ pulldown-cmark = "0.12"
 egui_commonmark = { version = "0.18", features = ["pulldown_cmark"] }
 knit-md-docx = "0.1"
 rfd = "0.15"
+ureq = { version = "2", features = ["json"] }
+serde_json = "1"

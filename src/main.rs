@@ -1,5 +1,7 @@
+mod ai;
 mod settings;
 
+use ai::AiPanel;
 use eframe::egui;
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use knit_md_docx::ConvertOptions;
@@ -18,6 +20,7 @@ struct MarkdownEditorApp {
     show_help: bool,
     show_settings: bool,
     settings: Settings,
+    ai_panel: AiPanel,
     export_rx: Option<Receiver<Result<PathBuf, String>>>,
     export_status: Option<String>,
 }
@@ -34,6 +37,7 @@ impl MarkdownEditorApp {
             show_help: false,
             show_settings: false,
             settings: Settings::default(),
+            ai_panel: AiPanel::new(),
             export_rx: None,
             export_status: None,
         }
@@ -137,6 +141,10 @@ impl eframe::App for MarkdownEditorApp {
                     });
                 });
                 ui.separator();
+                if ui.button("AI").clicked() {
+                    self.ai_panel.visible = true;
+                }
+                ui.separator();
                 if ui.button("Settings").clicked() {
                     self.show_settings = true;
                 }
@@ -196,6 +204,8 @@ impl eframe::App for MarkdownEditorApp {
                         .show(ui, &mut self.md_cache, &self.text);
                 });
         });
+
+        self.ai_panel.show(ctx, &mut self.text, &self.settings.openai_api_key.clone());
 
         if self.show_settings {
             self.settings.show_window(ctx, &mut self.show_settings);
