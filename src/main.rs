@@ -1,5 +1,6 @@
 mod ai;
 mod fonts;
+mod pptx_export;
 mod settings;
 
 use ai::AiPanel;
@@ -70,6 +71,39 @@ impl MarkdownEditorApp {
         }
     }
 
+    fn export_pptx(&mut self) {
+        let text = self.text.clone();
+        let default_name = self
+            .file_path
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .map(|s| format!("{}.pptx", s.to_string_lossy()))
+            .unwrap_or_else(|| "output.pptx".to_string());
+        let title = self
+            .file_path
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "Presentation".to_string());
+
+        let (tx, rx) = mpsc::channel();
+        self.export_rx = Some(rx);
+
+        std::thread::spawn(move || {
+            let path = rfd::FileDialog::new()
+                .add_filter("PowerPoint", &["pptx"])
+                .set_file_name(&default_name)
+                .save_file();
+
+            if let Some(path) = path {
+                let result = pptx_export::convert(&text, &path, &title)
+                    .map(|_| path)
+                    .map_err(|e| e.to_string());
+                tx.send(result).ok();
+            }
+        });
+    }
+
     fn export_docx(&mut self) {
         let text = self.text.clone();
         let default_name = self
@@ -138,6 +172,10 @@ impl eframe::App for MarkdownEditorApp {
                     ui.add_enabled_ui(!exporting, |ui| {
                         if ui.button("Export DOCX…").clicked() {
                             self.export_docx();
+                            ui.close_menu();
+                        }
+                        if ui.button("Export PPTX…").clicked() {
+                            self.export_pptx();
                             ui.close_menu();
                         }
                     });
