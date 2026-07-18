@@ -1,12 +1,14 @@
 use knit_md_docx::PageSetup;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub enum Theme {
     Light,
     Dark,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub enum DocxPage {
     A4,
     Letter,
@@ -21,11 +23,13 @@ impl DocxPage {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Settings {
     pub theme: Theme,
     pub editor_font_size: f32,
     pub docx_page: DocxPage,
     pub openai_api_key: String,
+    #[serde(skip)]
     pub show_api_key: bool,
 }
 
@@ -42,11 +46,32 @@ impl Default for Settings {
 }
 
 impl Settings {
-    pub fn show_window(
-        &mut self,
-        ctx: &eframe::egui::Context,
-        open: &mut bool,
-    ) {
+    /// Load from config file, falling back to defaults if missing or invalid.
+    pub fn load() -> Self {
+        Self::try_load().unwrap_or_default()
+    }
+
+    /// Save to config file. Silently ignores errors.
+    pub fn save(&self) {
+        let Some(path) = Self::config_path() else { return };
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(text) = toml::to_string(self) {
+            let _ = std::fs::write(path, text);
+        }
+    }
+
+    fn config_path() -> Option<PathBuf> {
+        dirs::config_dir().map(|d| d.join("markdown-editor").join("settings.toml"))
+    }
+
+    fn try_load() -> Option<Self> {
+        let text = std::fs::read_to_string(Self::config_path()?).ok()?;
+        toml::from_str(&text).ok()
+    }
+
+    pub fn show_window(&mut self, ctx: &eframe::egui::Context, open: &mut bool) {
         eframe::egui::Window::new("Settings")
             .open(open)
             .resizable(false)

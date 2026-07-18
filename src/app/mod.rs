@@ -35,7 +35,7 @@ impl MarkdownEditorApp {
             help_cache: CommonMarkCache::default(),
             show_help: false,
             show_settings: false,
-            settings: Settings::default(),
+            settings: Settings::load(),
             ai_panel: AiPanel::new(),
             export_rx: None,
             export_status: None,
@@ -155,8 +155,13 @@ impl eframe::App for MarkdownEditorApp {
 
         self.ai_panel.show(ctx, &mut self.text, &self.settings.openai_api_key.clone());
 
+        let settings_was_open = self.show_settings;
         if self.show_settings {
             self.settings.show_window(ctx, &mut self.show_settings);
+        }
+        // Save when the settings window is closed
+        if settings_was_open && !self.show_settings {
+            self.settings.save();
         }
 
         if self.show_help {
