@@ -1,5 +1,6 @@
 mod export;
 mod file_ops;
+mod toolbar;
 
 use crate::ai::AiPanel;
 use crate::settings::Settings;
@@ -21,6 +22,9 @@ pub struct MarkdownEditorApp {
     pub ai_panel: AiPanel,
     pub export_rx: Option<Receiver<Result<PathBuf, String>>>,
     pub export_status: Option<String>,
+    // Toolbar
+    pending_format: Option<toolbar::FormatAction>,
+    editor_cursor: (usize, usize), // (primary, secondary) char indices
 }
 
 impl MarkdownEditorApp {
@@ -39,6 +43,8 @@ impl MarkdownEditorApp {
             ai_panel: AiPanel::new(),
             export_rx: None,
             export_status: None,
+            pending_format: None,
+            editor_cursor: (0, 0),
         }
     }
 }
@@ -103,6 +109,14 @@ impl eframe::App for MarkdownEditorApp {
             });
         });
 
+        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                if let Some(action) = toolbar::show(ui) {
+                    self.pending_format = Some(action);
+                }
+            });
+        });
+
         egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 let file_label = self
@@ -132,13 +146,41 @@ impl eframe::App for MarkdownEditorApp {
                 egui::ScrollArea::vertical()
                     .id_salt("editor_scroll")
                     .show(ui, |ui| {
+                        // Apply pending toolbar format before rendering so the galley
+                        // is built from the already-modified text.
+                        let new_cursor = self.pending_format.take().map(|action| {
+                            let (s, e) = self.editor_cursor;
+                            toolbar::apply_format(&mut self.text, &action, s, e)
+                        });
+
                         let font_id = egui::FontId::monospace(self.settings.editor_font_size);
-                        ui.add(
-                            egui::TextEdit::multiline(&mut self.text)
-                                .desired_width(f32::INFINITY)
-                                .desired_rows(40)
-                                .font(font_id),
-                        );
+                        let output = egui::TextEdit::multiline(&mut self.text)
+                            .desired_width(f32::INFINITY)
+                            .desired_rows(40)
+                            .font(font_id)
+                            .show(ui);
+
+                        // Keep cursor position up to date for the next toolbar click.
+                        if let Some(cr) = &output.cursor_range {
+                            self.editor_cursor =
+                                (cr.primary.ccursor.index, cr.secondary.ccursor.index);
+                        }
+
+                        // After format application: set cursor and restore focus.
+                        if let Some(char_idx) = new_cursor {
+                            use egui::text::{CCursor, CCursorRange};
+                            use egui::widgets::text_edit::TextEditState;
+
+                            let ccursor = CCursor::new(char_idx);
+                            let range = CCursorRange::one(ccursor);
+                            let mut state =
+                                TextEditState::load(ctx, output.response.id)
+                                    .unwrap_or_default();
+                            state.cursor.set_char_range(Some(range));
+                            state.store(ctx, output.response.id);
+                            output.response.request_focus();
+                            self.editor_cursor = (char_idx, char_idx);
+                        }
                     });
             });
 
