@@ -69,6 +69,11 @@ impl eframe::App for MarkdownEditorApp {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
+                    if ui.button("New").clicked() {
+                        self.new_file();
+                        ui.close_menu();
+                    }
+                    ui.separator();
                     if ui.button("Open…").clicked() {
                         self.open_file(PathBuf::from("example.md"));
                         ui.close_menu();

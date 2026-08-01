@@ -5,6 +5,12 @@ use std::path::PathBuf;
 use super::MarkdownEditorApp;
 
 impl MarkdownEditorApp {
+    pub fn new_file(&mut self) {
+        self.text = String::new();
+        self.file_path = None;
+        self.export_status = None;
+    }
+
     pub fn open_file(&mut self, path: PathBuf) {
         if let Ok(content) = fs::read_to_string(&path) {
             self.text = content;
