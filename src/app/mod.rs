@@ -84,6 +84,10 @@ impl eframe::App for MarkdownEditorApp {
                     ui.separator();
                     let exporting = self.export_rx.is_some();
                     ui.add_enabled_ui(!exporting, |ui| {
+                        if ui.button("Export Text…").clicked() {
+                            self.export_text();
+                            ui.close_menu();
+                        }
                         if ui.button("Export DOCX…").clicked() {
                             self.export_docx();
                             ui.close_menu();

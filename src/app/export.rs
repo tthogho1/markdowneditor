@@ -1,7 +1,73 @@
 use knit_md_docx::ConvertOptions;
+use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 use std::sync::mpsc;
 
 use super::MarkdownEditorApp;
+
+/// Strip Markdown formatting and return plain text.
+fn markdown_to_plain_text(markdown: &str) -> String {
+    let parser = Parser::new_ext(markdown, Options::all());
+    let mut out = String::new();
+    let mut list_stack: Vec<Option<u64>> = Vec::new(); // None=bullet, Some(n)=ordered
+    let mut item_index: Vec<u64> = Vec::new();
+
+    for event in parser {
+        match event {
+            Event::Text(t) => out.push_str(&t),
+            Event::Code(t) => out.push_str(&t),
+            Event::SoftBreak => out.push(' '),
+            Event::HardBreak => out.push('\n'),
+            Event::Rule => out.push_str("\n---\n\n"),
+
+            Event::Start(Tag::Paragraph) => {}
+            Event::End(TagEnd::Paragraph) => out.push_str("\n\n"),
+
+            Event::Start(Tag::Heading { .. }) => {}
+            Event::End(TagEnd::Heading(_)) => out.push_str("\n\n"),
+
+            Event::Start(Tag::BlockQuote(_)) => out.push_str("  "),
+            Event::End(TagEnd::BlockQuote(_)) => out.push('\n'),
+
+            Event::Start(Tag::CodeBlock(_)) => out.push('\n'),
+            Event::End(TagEnd::CodeBlock) => out.push('\n'),
+
+            Event::Start(Tag::List(start)) => {
+                list_stack.push(start);
+                item_index.push(start.unwrap_or(1));
+            }
+            Event::End(TagEnd::List(_)) => {
+                list_stack.pop();
+                item_index.pop();
+                out.push('\n');
+            }
+            Event::Start(Tag::Item) => {
+                let depth = list_stack.len().saturating_sub(1);
+                let indent = "  ".repeat(depth);
+                if let Some(last_idx) = item_index.last_mut() {
+                    if list_stack.last().and_then(|s| *s).is_some() {
+                        out.push_str(&format!("{indent}{}. ", last_idx));
+                        *last_idx += 1;
+                    } else {
+                        out.push_str(&format!("{indent}• "));
+                    }
+                }
+            }
+            Event::End(TagEnd::Item) => out.push('\n'),
+
+            Event::Start(Tag::Emphasis) | Event::End(TagEnd::Emphasis) => {}
+            Event::Start(Tag::Strong) | Event::End(TagEnd::Strong) => {}
+            Event::Start(Tag::Strikethrough) | Event::End(TagEnd::Strikethrough) => {}
+            Event::Start(Tag::Link { .. }) | Event::End(TagEnd::Link) => {}
+            Event::Start(Tag::Image { .. }) | Event::End(TagEnd::Image) => {}
+
+            _ => {}
+        }
+    }
+
+    // Trim trailing whitespace while keeping at most one trailing newline
+    let trimmed = out.trim_end();
+    format!("{trimmed}\n")
+}
 
 impl MarkdownEditorApp {
     pub fn export_docx(&mut self) {
@@ -27,6 +93,33 @@ impl MarkdownEditorApp {
                 let mut opts = ConvertOptions::default();
                 opts.page = page;
                 let result = knit_md_docx::write_file_with(&text, &opts, &path)
+                    .map(|_| path)
+                    .map_err(|e| e.to_string());
+                tx.send(result).ok();
+            }
+        });
+    }
+
+    pub fn export_text(&mut self) {
+        let plain = markdown_to_plain_text(&self.text);
+        let default_name = self
+            .file_path
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .map(|s| format!("{}.txt", s.to_string_lossy()))
+            .unwrap_or_else(|| "output.txt".to_string());
+
+        let (tx, rx) = mpsc::channel();
+        self.export_rx = Some(rx);
+
+        std::thread::spawn(move || {
+            let path = rfd::FileDialog::new()
+                .add_filter("Text File", &["txt"])
+                .set_file_name(&default_name)
+                .save_file();
+
+            if let Some(path) = path {
+                let result = std::fs::write(&path, plain)
                     .map(|_| path)
                     .map_err(|e| e.to_string());
                 tx.send(result).ok();
