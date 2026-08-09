@@ -13,6 +13,7 @@ pub enum FormatAction {
     NumberedList,
     Quote,
     HorizontalRule,
+    Table,
 }
 
 /// Render the toolbar and return the triggered action, if any.
@@ -74,6 +75,12 @@ pub fn show(ui: &mut egui::Ui) -> Option<FormatAction> {
 
     if btn(ui, "─── HR", "Horizontal rule (---)") {
         action = Some(FormatAction::HorizontalRule);
+    }
+
+    ui.separator();
+
+    if btn(ui, "⊞ Table", "Insert table (3 columns × 2 rows)") {
+        action = Some(FormatAction::Table);
     }
 
     action
@@ -148,6 +155,21 @@ pub fn apply_format(
             let insert = "\n---\n";
             text.insert_str(hi, insert);
             hi + insert.len()
+        }
+        FormatAction::Table => {
+            let template = "| Header 1 | Header 2 | Header 3 |\n\
+                            | -------- | -------- | -------- |\n\
+                            | Cell     | Cell     | Cell     |\n\
+                            | Cell     | Cell     | Cell     |\n";
+            let needs_newline = hi > 0 && !text[..hi].ends_with('\n');
+            let insert = if needs_newline {
+                format!("\n{template}")
+            } else {
+                template.to_string()
+            };
+            let end = hi + insert.len();
+            text.insert_str(hi, &insert);
+            end
         }
     };
 
