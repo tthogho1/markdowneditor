@@ -1,7 +1,6 @@
 mod ai;
 mod app;
 mod fonts;
-mod pptx_export;
 mod settings;
 
 fn main() -> eframe::Result<()> {
