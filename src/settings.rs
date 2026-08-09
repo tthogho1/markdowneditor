@@ -29,6 +29,8 @@ pub struct Settings {
     pub editor_font_size: f32,
     pub docx_page: DocxPage,
     pub openai_api_key: String,
+    #[serde(default)]
+    pub recent_files: Vec<std::path::PathBuf>,
     #[serde(skip)]
     pub show_api_key: bool,
 }
@@ -40,6 +42,7 @@ impl Default for Settings {
             editor_font_size: 14.0,
             docx_page: DocxPage::A4,
             openai_api_key: String::new(),
+            recent_files: Vec::new(),
             show_api_key: false,
         }
     }
@@ -60,6 +63,13 @@ impl Settings {
         if let Ok(text) = toml::to_string(self) {
             let _ = std::fs::write(path, text);
         }
+    }
+
+    /// Add a file to the recent list (max 10, deduplicates).
+    pub fn push_recent(&mut self, path: std::path::PathBuf) {
+        self.recent_files.retain(|p| p != &path);
+        self.recent_files.insert(0, path);
+        self.recent_files.truncate(10);
     }
 
     fn config_path() -> Option<PathBuf> {

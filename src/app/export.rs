@@ -127,6 +127,57 @@ impl MarkdownEditorApp {
         });
     }
 
+    pub fn export_html(&mut self) {
+        let markdown = self.text.clone();
+        let default_name = self
+            .file_path
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .map(|s| format!("{}.html", s.to_string_lossy()))
+            .unwrap_or_else(|| "output.html".to_string());
+
+        let (tx, rx) = mpsc::channel();
+        self.export_rx = Some(rx);
+
+        std::thread::spawn(move || {
+            let parser =
+                pulldown_cmark::Parser::new_ext(&markdown, pulldown_cmark::Options::all());
+            let mut body = String::new();
+            pulldown_cmark::html::push_html(&mut body, parser);
+
+            let html = format!(
+                "<!DOCTYPE html>\n\
+                 <html lang=\"ja\">\n\
+                 <head>\n\
+                 <meta charset=\"utf-8\">\n\
+                 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
+                 <style>\n\
+                 body{{font-family:sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6}}\n\
+                 pre{{background:#f6f8fa;padding:12px;border-radius:6px;overflow-x:auto}}\n\
+                 code{{background:#f6f8fa;padding:2px 4px;border-radius:3px}}\n\
+                 blockquote{{border-left:4px solid #ddd;margin:0;padding-left:16px;color:#555}}\n\
+                 </style>\n\
+                 </head>\n\
+                 <body>\n\
+                 {body}\n\
+                 </body>\n\
+                 </html>"
+            );
+
+            let path = rfd::FileDialog::new()
+                .add_filter("HTML File", &["html", "htm"])
+                .set_file_name(&default_name)
+                .save_file();
+
+            if let Some(path) = path {
+                let result = std::fs::write(&path, html)
+                    .map(|_| path)
+                    .map_err(|e| e.to_string());
+                tx.send(result).ok();
+            }
+        });
+    }
+
     pub fn export_pptx(&mut self) {
         let text = self.text.clone();
         let default_name = self

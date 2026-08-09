@@ -1,6 +1,7 @@
 use eframe::egui;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::mpsc;
 
 use super::MarkdownEditorApp;
 
@@ -14,26 +15,63 @@ impl MarkdownEditorApp {
     pub fn open_file(&mut self, path: PathBuf) {
         if let Ok(content) = fs::read_to_string(&path) {
             self.text = content;
+            self.settings.push_recent(path.clone());
+            self.settings.save();
             self.file_path = Some(path);
         }
+    }
+
+    /// Show a native open dialog on a background thread.
+    pub fn open_file_dialog(&mut self) {
+        let (tx, rx) = mpsc::channel();
+        self.open_rx = Some(rx);
+        std::thread::spawn(move || {
+            let result = rfd::FileDialog::new()
+                .add_filter("Markdown", &["md", "markdown"])
+                .add_filter("Text", &["txt"])
+                .add_filter("All files", &["*"])
+                .pick_file()
+                .and_then(|path| {
+                    fs::read_to_string(&path).ok().map(|text| (path, text))
+                });
+            tx.send(result).ok();
+        });
     }
 
     pub fn save_file(&mut self) {
         if let Some(path) = &self.file_path.clone() {
             if let Err(e) = fs::write(path, &self.text) {
-                eprintln!("Failed to save file: {}", e);
+                self.export_status = Some(format!("Save failed: {e}"));
             }
         } else {
-            eprintln!("No file path set; use Save As.");
+            self.save_as_dialog();
         }
     }
 
-    pub fn save_as(&mut self, path: PathBuf) {
-        if let Err(e) = fs::write(&path, &self.text) {
-            eprintln!("Failed to save file: {}", e);
-        } else {
-            self.file_path = Some(path);
-        }
+    /// Show a native save dialog on a background thread.
+    pub fn save_as_dialog(&mut self) {
+        let text = self.text.clone();
+        let default_name = self
+            .file_path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "untitled.md".to_string());
+
+        let (tx, rx) = mpsc::channel();
+        self.save_as_rx = Some(rx);
+        std::thread::spawn(move || {
+            let path = rfd::FileDialog::new()
+                .add_filter("Markdown", &["md", "markdown"])
+                .set_file_name(&default_name)
+                .save_file();
+            if let Some(path) = path {
+                let result = fs::write(&path, &text)
+                    .map(|_| path)
+                    .map_err(|e| e.to_string());
+                tx.send(result).ok();
+            }
+        });
     }
 
     /// Open the first file dropped onto the window.

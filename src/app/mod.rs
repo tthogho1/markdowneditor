@@ -22,6 +22,8 @@ pub struct MarkdownEditorApp {
     pub ai_panel: AiPanel,
     pub export_rx: Option<Receiver<Result<PathBuf, String>>>,
     pub export_status: Option<String>,
+    pub open_rx: Option<Receiver<Option<(PathBuf, String)>>>,
+    pub save_as_rx: Option<Receiver<Result<PathBuf, String>>>,
     // Toolbar
     pending_format: Option<toolbar::FormatAction>,
     editor_cursor: (usize, usize), // (primary, secondary) char indices
@@ -43,6 +45,8 @@ impl MarkdownEditorApp {
             ai_panel: AiPanel::new(),
             export_rx: None,
             export_status: None,
+            open_rx: None,
+            save_as_rx: None,
             pending_format: None,
             editor_cursor: (0, 0),
         }
@@ -54,6 +58,35 @@ impl eframe::App for MarkdownEditorApp {
         self.settings.apply_theme(ctx);
         self.handle_dropped_files(ctx);
         self.preview_hovering_files(ctx);
+
+        // Poll file open result
+        if let Some(rx) = &self.open_rx {
+            if let Ok(result) = rx.try_recv() {
+                if let Some((path, content)) = result {
+                    self.text = content;
+                    self.settings.push_recent(path.clone());
+                    self.settings.save();
+                    self.file_path = Some(path);
+                }
+                self.open_rx = None;
+            }
+        }
+
+        // Poll save-as result
+        if let Some(rx) = &self.save_as_rx {
+            if let Ok(result) = rx.try_recv() {
+                match result {
+                    Ok(path) => {
+                        self.settings.push_recent(path.clone());
+                        self.settings.save();
+                        self.file_path = Some(path);
+                        self.export_status = Some("Saved".to_string());
+                    }
+                    Err(e) => self.export_status = Some(format!("Save failed: {e}")),
+                }
+                self.save_as_rx = None;
+            }
+        }
 
         // Poll export result from background thread
         if let Some(rx) = &self.export_rx {
@@ -75,20 +108,51 @@ impl eframe::App for MarkdownEditorApp {
                     }
                     ui.separator();
                     if ui.button("Open…").clicked() {
-                        self.open_file(PathBuf::from("example.md"));
+                        self.open_file_dialog();
                         ui.close_menu();
                     }
                     if ui.button("Save").clicked() {
                         self.save_file();
                         ui.close_menu();
                     }
-                    if ui.button("Save As… (stub)").clicked() {
-                        self.save_as(PathBuf::from("output.md"));
+                    if ui.button("Save As…").clicked() {
+                        self.save_as_dialog();
                         ui.close_menu();
                     }
                     ui.separator();
-                    let exporting = self.export_rx.is_some();
-                    ui.add_enabled_ui(!exporting, |ui| {
+
+                    // Recent files submenu
+                    let recents = self.settings.recent_files.clone();
+                    ui.menu_button("Recent Files", |ui| {
+                        if recents.is_empty() {
+                            ui.label("(none)");
+                        } else {
+                            for path in &recents {
+                                let label = path
+                                    .file_name()
+                                    .map(|n| n.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| path.to_string_lossy().to_string());
+                                if ui.button(&label).on_hover_text(path.to_string_lossy()).clicked() {
+                                    self.open_file(path.clone());
+                                    ui.close_menu();
+                                }
+                            }
+                            ui.separator();
+                            if ui.button("Clear").clicked() {
+                                self.settings.recent_files.clear();
+                                self.settings.save();
+                                ui.close_menu();
+                            }
+                        }
+                    });
+
+                    ui.separator();
+                    let busy = self.export_rx.is_some();
+                    ui.add_enabled_ui(!busy, |ui| {
+                        if ui.button("Export HTML…").clicked() {
+                            self.export_html();
+                            ui.close_menu();
+                        }
                         if ui.button("Export Text…").clicked() {
                             self.export_text();
                             ui.close_menu();
@@ -139,10 +203,17 @@ impl eframe::App for MarkdownEditorApp {
                     ui.separator();
                     ui.label(status);
                 }
-                if self.export_rx.is_some() {
+                if self.export_rx.is_some() || self.open_rx.is_some() || self.save_as_rx.is_some() {
                     ui.separator();
-                    ui.label("Exporting…");
+                    ui.spinner();
                 }
+
+                // Right-aligned character / line counts
+                let chars = self.text.chars().count();
+                let lines = self.text.lines().count().max(1);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(format!("{chars} 文字  {lines} 行"));
+                });
             });
         });
 
