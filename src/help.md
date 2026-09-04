@@ -1,29 +1,29 @@
 # Markdown Cheat Sheet
 
-## キーボードショートカット (Keyboard Shortcuts)
+## Keyboard Shortcuts
 
-macOS では `Cmd`、Windows / Linux では `Ctrl` を使います。
+Use `Cmd` on macOS and `Ctrl` on Windows / Linux.
 
-| ショートカット | 動作 |
+| Shortcut | Action |
 |----------------|------|
-| `Cmd/Ctrl + N` | 新規ファイル |
-| `Cmd/Ctrl + O` | 開く |
-| `Cmd/Ctrl + S` | 保存 |
-| `Cmd/Ctrl + Shift + S` | 名前を付けて保存 |
-| `Cmd/Ctrl + F` | 検索・置換バーを開く |
-| `Cmd/Ctrl + G` | 次の検索結果へ |
-| `Cmd/Ctrl + Shift + G` | 前の検索結果へ |
-| `Esc` | 検索バーを閉じる |
-| `Cmd/Ctrl + B` | 太字 |
-| `Cmd/Ctrl + I` | 斜体 |
-| `Cmd/Ctrl + K` | リンク |
-| `Cmd/Ctrl + Shift + O` | アウトライン表示の切り替え |
+| `Cmd/Ctrl + N` | New file |
+| `Cmd/Ctrl + O` | Open |
+| `Cmd/Ctrl + S` | Save |
+| `Cmd/Ctrl + Shift + S` | Save As |
+| `Cmd/Ctrl + F` | Open find/replace bar |
+| `Cmd/Ctrl + G` | Go to next match |
+| `Cmd/Ctrl + Shift + G` | Go to previous match |
+| `Esc` | Close find bar |
+| `Cmd/Ctrl + B` | Bold |
+| `Cmd/Ctrl + I` | Italic |
+| `Cmd/Ctrl + K` | Link |
+| `Cmd/Ctrl + Shift + O` | Toggle outline view |
 
-未保存の変更があるときはタイトルバーとステータスバーに `●` が表示され、
-新規作成・ファイルを開く・終了の前に確認ダイアログが出ます。
+When there are unsaved changes, a `●` is shown in the title bar and status bar,
+and a confirmation dialog appears before creating a new file, opening a file, or exiting.
 
-`View` メニューの `Sync scroll` で、エディタとプレビューのスクロール同期を
-オン / オフできます。
+You can toggle scroll synchronization between the editor and preview using
+`Sync scroll` in the `View` menu.
 
 ## Headings
 ```
