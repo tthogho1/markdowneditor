@@ -1,5 +1,7 @@
 use eframe::egui::{self, RichText};
 
+use super::text_util::{byte_to_char, char_to_byte};
+
 #[derive(Clone)]
 pub enum FormatAction {
     Bold,
@@ -192,14 +194,4 @@ fn wrap(text: &mut String, lo: usize, hi: usize, pre: &str, suf: &str) -> usize 
 
 fn line_start(text: &str, byte_pos: usize) -> usize {
     text[..byte_pos].rfind('\n').map_or(0, |i| i + 1)
-}
-
-fn char_to_byte(text: &str, char_idx: usize) -> usize {
-    text.char_indices()
-        .nth(char_idx)
-        .map_or(text.len(), |(b, _)| b)
-}
-
-fn byte_to_char(text: &str, byte_idx: usize) -> usize {
-    text[..byte_idx.min(text.len())].chars().count()
 }

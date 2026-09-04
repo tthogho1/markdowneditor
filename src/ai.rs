@@ -22,18 +22,22 @@ impl AiPanel {
     }
 
     /// Show the AI panel window. Overwrites `markdown` with the API response on success.
+    /// Returns `true` on the frame the buffer was replaced.
     pub fn show(
         &mut self,
         ctx: &eframe::egui::Context,
         markdown: &mut String,
         api_key: &str,
-    ) {
+    ) -> bool {
+        let mut replaced = false;
+
         // Poll result from background thread
         if let Some(rx) = &self.result_rx {
             if let Ok(result) = rx.try_recv() {
                 match result {
                     Ok(text) => {
                         *markdown = text;
+                        replaced = true;
                         self.status = Some("完了".to_string());
                     }
                     Err(e) => {
@@ -45,7 +49,7 @@ impl AiPanel {
         }
 
         if !self.visible {
-            return;
+            return replaced;
         }
 
         let sending = self.result_rx.is_some();
@@ -148,6 +152,8 @@ impl AiPanel {
         } else if do_send {
             self.send(markdown.clone(), self.prompt.clone(), api_key.to_string());
         }
+
+        replaced
     }
 
     fn send(&mut self, markdown: String, prompt: String, api_key: String) {
