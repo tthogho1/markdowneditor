@@ -40,6 +40,8 @@ pub struct ScrollSync {
     /// Offsets to force on the next frame.
     pub apply_editor: Option<f32>,
     pub apply_preview: Option<f32>,
+    /// Frames during which the editor leads regardless of the pointer.
+    editor_leads_for: u8,
 }
 
 impl Default for ScrollSync {
@@ -50,6 +52,7 @@ impl Default for ScrollSync {
             preview: Pane::default(),
             apply_editor: None,
             apply_preview: None,
+            editor_leads_for: 0,
         }
     }
 }
@@ -63,6 +66,13 @@ impl ScrollSync {
         self.preview.record(offset, content_h, view_h);
     }
 
+    /// Let the editor lead for the next few frames, so a jump triggered from the preview
+    /// (e.g. a TOC link) carries the preview along even though the pointer is over it.
+    /// A few frames, because the editor's scroll-to-rect lands a frame or two later.
+    pub fn lead_with_editor(&mut self) {
+        self.editor_leads_for = 3;
+    }
+
     /// Decide which pane leads this frame and queue the follower's offset.
     ///
     /// Only the pane under the pointer can lead, which keeps the pane we just scrolled
@@ -71,8 +81,11 @@ impl ScrollSync {
         self.apply_editor = None;
         self.apply_preview = None;
 
+        let editor_forced = self.editor_leads_for > 0;
+        self.editor_leads_for = self.editor_leads_for.saturating_sub(1);
+
         if self.enabled {
-            if pointer_in_editor && self.editor.moved() {
+            if (pointer_in_editor || editor_forced) && self.editor.moved() {
                 self.apply_preview = Some(self.editor.fraction() * self.preview.max);
             } else if pointer_in_preview && self.preview.moved() {
                 self.apply_editor = Some(self.preview.fraction() * self.editor.max);
@@ -109,6 +122,18 @@ mod tests {
     #[test]
     fn a_pane_without_the_pointer_does_not_lead() {
         assert_eq!(sync_with(false).apply_preview, None);
+    }
+
+    #[test]
+    fn forced_editor_lead_overrides_the_pointer() {
+        let mut s = ScrollSync::default();
+        s.record_editor(0.0, 2000.0, 500.0);
+        s.record_preview(0.0, 1000.0, 500.0);
+        s.lead_with_editor();
+        s.sync(false, true);
+        s.record_editor(750.0, 2000.0, 500.0);
+        s.sync(false, true);
+        assert_eq!(s.apply_preview, Some(250.0));
     }
 
     #[test]

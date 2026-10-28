@@ -195,10 +195,12 @@ impl MarkdownEditorApp {
         let (tx, rx) = mpsc::channel();
         self.export_rx = Some(rx);
         std::thread::spawn(move || {
-            let parser =
-                pulldown_cmark::Parser::new_ext(&markdown, pulldown_cmark::Options::all());
+            let events =
+                pulldown_cmark::Parser::new_ext(&markdown, pulldown_cmark::Options::all())
+                    .collect();
+            let events = super::toc::with_heading_ids(&markdown, events);
             let mut body = String::new();
-            pulldown_cmark::html::push_html(&mut body, parser);
+            pulldown_cmark::html::push_html(&mut body, events.into_iter());
             let html = format!(
                 "<!DOCTYPE html>\n\
                  <html lang=\"ja\">\n\

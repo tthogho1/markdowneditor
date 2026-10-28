@@ -5,6 +5,7 @@ mod outline;
 mod scroll_sync;
 mod shortcuts;
 mod text_util;
+mod toc;
 mod toolbar;
 
 use crate::ai::AiPanel;
@@ -285,6 +286,11 @@ impl MarkdownEditorApp {
                         self.find.open();
                         ui.close_menu();
                     }
+                    ui.separator();
+                    if ui.button("Insert Table of Contents").clicked() {
+                        self.pending_format = Some(toolbar::FormatAction::Toc);
+                        ui.close_menu();
+                    }
                 });
 
                 ui.menu_button("View", |ui| {
@@ -438,9 +444,25 @@ impl MarkdownEditorApp {
                     scroll = scroll.vertical_scroll_offset(offset);
                 }
 
+                // Hook `#slug` links so clicking a TOC entry jumps to its heading instead of
+                // being handed to the OS as a URL. Scroll sync then brings the preview along.
+                let headings = toc::entries(&self.text);
+                self.md_cache.link_hooks_clear();
+                for h in &headings {
+                    self.md_cache.add_link_hook(format!("#{}", h.slug));
+                }
+
                 let out = scroll.show(ui, |ui| {
                     CommonMarkViewer::new().show(ui, &mut self.md_cache, &self.text);
                 });
+
+                if let Some(h) = headings.iter().find(|h| {
+                    self.md_cache.get_link_hook(&format!("#{}", h.slug)) == Some(true)
+                }) {
+                    self.pending_select = Some((h.char_start, h.char_start));
+                    self.scroll_sync.lead_with_editor();
+                    ctx.request_repaint();
+                }
 
                 self.scroll_sync.record_preview(
                     out.state.offset.y,
@@ -514,6 +536,8 @@ impl eframe::App for MarkdownEditorApp {
                                 outline::show(ui, &headings, self.editor_cursor.0)
                             {
                                 self.pending_select = Some((char_start, char_start));
+                                self.scroll_sync.lead_with_editor();
+                                ctx.request_repaint();
                             }
                         });
                 });

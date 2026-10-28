@@ -25,6 +25,10 @@ and a confirmation dialog appears before creating a new file, opening a file, or
 You can toggle scroll synchronization between the editor and preview using
 `Sync scroll` in the `View` menu.
 
+`Edit → Insert Table of Contents` (or the `☰ TOC` toolbar button) inserts a linked
+list of all headings at the cursor. Clicking an entry in the preview jumps to that
+heading, and the links also work in exported HTML. Re-insert it after changing headings.
+
 ## Headings
 ```
 # H1

@@ -16,6 +16,7 @@ pub enum FormatAction {
     Quote,
     HorizontalRule,
     Table,
+    Toc,
 }
 
 /// Render the toolbar and return the triggered action, if any.
@@ -83,6 +84,9 @@ pub fn show(ui: &mut egui::Ui) -> Option<FormatAction> {
 
     if btn(ui, "⊞ Table", "Insert table (3 columns × 2 rows)") {
         action = Some(FormatAction::Table);
+    }
+    if btn(ui, "☰ TOC", "Insert table of contents from headings") {
+        action = Some(FormatAction::Toc);
     }
 
     action
@@ -172,6 +176,25 @@ pub fn apply_format(
             let end = hi + insert.len();
             text.insert_str(hi, &insert);
             end
+        }
+        FormatAction::Toc => {
+            let toc = super::toc::render(&super::toc::entries(text));
+            if toc.is_empty() {
+                hi
+            } else {
+                // Keep the list a separate block from whatever surrounds it.
+                let before = if hi == 0 || text[..hi].ends_with("\n\n") {
+                    ""
+                } else if text[..hi].ends_with('\n') {
+                    "\n"
+                } else {
+                    "\n\n"
+                };
+                let insert = format!("{before}{toc}\n");
+                let end = hi + insert.len();
+                text.insert_str(hi, &insert);
+                end
+            }
         }
     };
 
