@@ -20,6 +20,7 @@ pub struct Hits {
     pub italic: bool,
     pub link: bool,
     pub toggle_outline: bool,
+    pub toggle_files: bool,
 }
 
 const COMMAND: Modifiers = Modifiers::COMMAND;
@@ -35,6 +36,7 @@ pub fn consume(ctx: &eframe::egui::Context) -> Hits {
         hits.save_as = hit(COMMAND_SHIFT, Key::S);
         hits.find_prev = hit(COMMAND_SHIFT, Key::G);
         hits.toggle_outline = hit(COMMAND_SHIFT, Key::O);
+        hits.toggle_files = hit(COMMAND_SHIFT, Key::E);
 
         hits.new_file = hit(COMMAND, Key::N);
         hits.open = hit(COMMAND, Key::O);

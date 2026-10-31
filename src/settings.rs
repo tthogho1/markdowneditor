@@ -31,6 +31,9 @@ pub struct Settings {
     pub openai_api_key: String,
     #[serde(default)]
     pub recent_files: Vec<std::path::PathBuf>,
+    /// Folder shown in the Files panel; reopened on startup.
+    #[serde(default)]
+    pub last_folder: Option<std::path::PathBuf>,
     #[serde(skip)]
     pub show_api_key: bool,
 }
@@ -43,6 +46,7 @@ impl Default for Settings {
             docx_page: DocxPage::A4,
             openai_api_key: String::new(),
             recent_files: Vec::new(),
+            last_folder: None,
             show_api_key: false,
         }
     }
