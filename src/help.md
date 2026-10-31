@@ -18,12 +18,16 @@ Use `Cmd` on macOS and `Ctrl` on Windows / Linux.
 | `Cmd/Ctrl + I` | Italic |
 | `Cmd/Ctrl + K` | Link |
 | `Cmd/Ctrl + Shift + O` | Toggle outline view |
+| `Cmd/Ctrl + Shift + E` | Toggle files panel |
 
 When there are unsaved changes, a `●` is shown in the title bar and status bar,
 and a confirmation dialog appears before creating a new file, opening a file, or exiting.
 
 You can toggle scroll synchronization between the editor and preview using
 `Sync scroll` in the `View` menu.
+
+`File → Open Folder…` lists every Markdown file in a folder (and its subfolders) in the
+Files panel; click a file to switch to it. The folder is reopened on the next launch.
 
 `Edit → Insert Table of Contents` (or the `☰ TOC` toolbar button) inserts a linked
 list of all headings at the cursor. Clicking an entry in the preview jumps to that

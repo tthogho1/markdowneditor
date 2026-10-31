@@ -1,6 +1,7 @@
 mod export;
 mod file_ops;
 mod find;
+mod folder;
 mod outline;
 mod scroll_sync;
 mod shortcuts;
@@ -49,11 +50,17 @@ pub struct MarkdownEditorApp {
     find: find::FindReplace,
     show_outline: bool,
     scroll_sync: ScrollSync,
+    folder: folder::FolderPanel,
 }
 
 impl MarkdownEditorApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         crate::fonts::setup(&cc.egui_ctx);
+        let settings = Settings::load();
+        let mut folder = folder::FolderPanel::default();
+        if let Some(root) = settings.last_folder.clone() {
+            folder.load(root);
+        }
         Self {
             text: String::from(
                 "# Hello from Markdown Editor\n\nStart typing **Markdown** here.\n\n- Live preview\n- File open/save\n- Fast native Rust app\n",
@@ -63,7 +70,7 @@ impl MarkdownEditorApp {
             help_cache: CommonMarkCache::default(),
             show_help: false,
             show_settings: false,
-            settings: Settings::load(),
+            settings,
             ai_panel: AiPanel::new(),
             export_rx: None,
             export_status: None,
@@ -81,6 +88,7 @@ impl MarkdownEditorApp {
             find: find::FindReplace::default(),
             show_outline: false,
             scroll_sync: ScrollSync::default(),
+            folder,
         }
     }
 
@@ -149,6 +157,12 @@ impl MarkdownEditorApp {
             }
         }
 
+        if let Some(root) = self.folder.poll() {
+            self.settings.last_folder = Some(root);
+            self.settings.save();
+            ctx.request_repaint();
+        }
+
         if let Some(rx) = &self.export_rx {
             if let Ok(result) = rx.try_recv() {
                 self.export_status = Some(match result {
@@ -189,6 +203,9 @@ impl MarkdownEditorApp {
         if hits.toggle_outline {
             self.show_outline = !self.show_outline;
         }
+        if hits.toggle_files {
+            self.folder.visible = !self.folder.visible;
+        }
         if hits.bold {
             self.pending_format = Some(toolbar::FormatAction::Bold);
         }
@@ -222,6 +239,13 @@ impl MarkdownEditorApp {
                     ui.separator();
                     if menu_item(ui, "Open…", &shortcuts::hint(false, "O")) {
                         self.request(ctx, PendingAction::Open);
+                        ui.close_menu();
+                    }
+                    if ui
+                        .add_enabled(!self.folder.busy(), egui::Button::new("Open Folder…"))
+                        .clicked()
+                    {
+                        self.folder.pick();
                         ui.close_menu();
                     }
                     if menu_item(ui, "Save", &shortcuts::hint(false, "S")) {
@@ -294,6 +318,15 @@ impl MarkdownEditorApp {
                 });
 
                 ui.menu_button("View", |ui| {
+                    if menu_item_toggle(
+                        ui,
+                        "Files",
+                        &shortcuts::hint(true, "E"),
+                        self.folder.visible,
+                    ) {
+                        self.folder.visible = !self.folder.visible;
+                        ui.close_menu();
+                    }
                     let outline = menu_item_toggle(
                         ui,
                         "Outline",
@@ -520,6 +553,30 @@ impl eframe::App for MarkdownEditorApp {
         }
 
         self.status_bar(ctx);
+
+        if self.folder.visible {
+            egui::SidePanel::left("folder_panel")
+                .resizable(true)
+                .default_width(200.0)
+                .show(ctx, |ui| {
+                    ui.label("Files");
+                    ui.separator();
+                    if let Some(path) = self.folder.show(ui, self.file_path.as_deref()) {
+                        self.request(ctx, PendingAction::OpenPath(path));
+                    }
+                    if self.folder.busy() {
+                        ui.spinner();
+                    }
+                });
+            // Closing the folder from the panel also forgets it for the next launch.
+            if self.folder.folder.is_none()
+                && !self.folder.busy()
+                && self.settings.last_folder.is_some()
+            {
+                self.settings.last_folder = None;
+                self.settings.save();
+            }
+        }
 
         if self.show_outline {
             egui::SidePanel::left("outline_panel")
