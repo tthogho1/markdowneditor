@@ -6,7 +6,7 @@
 
 use eframe::egui;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver};
+use std::sync::mpsc::{self, Receiver, TryRecvError};
 
 /// Don't descend forever into deep trees (or symlink loops).
 const MAX_DEPTH: usize = 8;
@@ -99,9 +99,14 @@ impl FolderPanel {
 
     /// Poll the background scan. Returns the folder's root when a new one finished loading.
     pub fn poll(&mut self) -> Option<PathBuf> {
-        let result = self.rx.as_ref()?.try_recv().ok()?;
+        let received = match self.rx.as_ref()?.try_recv() {
+            Err(TryRecvError::Empty) => return None,
+            other => other,
+        };
+        // Done either way: a result arrived, or the thread died (Disconnected) without
+        // sending one. Clearing `rx` in both cases keeps `busy()` from sticking at true.
         self.rx = None;
-        let folder = result?;
+        let folder = received.ok()??;
         let root = folder.root.clone();
         self.folder = Some(folder);
         self.visible = true;
@@ -214,6 +219,18 @@ impl FolderPanel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn poll_clears_busy_when_scan_thread_dies() {
+        let mut panel = FolderPanel::default();
+        let (tx, rx) = mpsc::channel();
+        panel.rx = Some(rx);
+        assert_eq!(panel.poll(), None);
+        assert!(panel.busy(), "still waiting while the sender is alive");
+        drop(tx); // simulates the thread panicking before it sends
+        assert_eq!(panel.poll(), None);
+        assert!(!panel.busy());
+    }
 
     #[test]
     fn scans_markdown_recursively_and_skips_hidden_and_build_dirs() {
